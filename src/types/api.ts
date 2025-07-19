@@ -103,15 +103,16 @@ export interface TranscriptSegment {
 }
 
 export interface Transcript {
-  id: string
-  story_id: string
-  language: string
-  text: string
-  segments: TranscriptSegment[]
+  original_text: string
+  enhanced_text?: string
+  words: Array<{
+    word: string
+    start_time: number
+    end_time: number
+  }>
   confidence: number
-  processing_status: string
-  created_at: string
-  updated_at: string
+  analysis?: Record<string, unknown>
+  transcription_method?: string
 }
 
 export interface TranscriptCreate {
@@ -132,6 +133,11 @@ export interface Translation {
   processing_status: string
   created_at: string
   updated_at: string
+  words?: Array<{
+    word: string
+    start_time: number
+    end_time: number
+  }>
 }
 
 export interface TranslationCreate {

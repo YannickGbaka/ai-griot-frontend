@@ -37,6 +37,10 @@
     @apply bg-white text-gray-700 px-4 py-2 rounded-lg font-medium border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
+  .input-field {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-griot-500 focus:border-transparent transition-colors;
+  }
+
   .card {
     @apply bg-white rounded-lg shadow-sm p-6 border border-gray-200;
   }

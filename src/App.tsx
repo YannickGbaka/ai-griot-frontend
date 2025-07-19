@@ -20,7 +20,7 @@ function App() {
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/stories" element={<StoriesPage />} />
-          <Route path="/stories/:id" element={<StoryDetailPage />} />
+          <Route path="/stories/:storyId" element={<StoryDetailPage />} />
         </Routes>
       </Layout>
     </AuthProvider>

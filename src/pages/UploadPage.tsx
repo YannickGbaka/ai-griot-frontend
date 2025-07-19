@@ -4,6 +4,8 @@ import { useDropzone } from 'react-dropzone'
 import { storiesService, type StoryUploadData } from '../services/storiesService'
 import { mediaService } from '../services/mediaService'
 import { aiService, type TranscriptionResponse } from '../services/aiService'
+import { processingService, type ProcessingStatusResponse } from '../services/processingService'
+import ProcessingStepperComponent from '../components/ProcessingStepperComponent'
 
 interface UploadData {
   title: string
@@ -16,7 +18,7 @@ interface UploadData {
   consentGiven: boolean
 }
 
-// Upload progress states
+// Updated upload progress states to match processing steps
 type UploadStatus = 'idle' | 'uploading' | 'processing' | 'success' | 'error'
 
 interface ProcessingStatus {
@@ -26,6 +28,8 @@ interface ProcessingStatus {
   storyId?: string
   transcription?: TranscriptionResponse
   error?: string
+  // Add detailed processing status
+  detailedStatus?: ProcessingStatusResponse
 }
 
 export default function UploadPage() {
@@ -168,23 +172,20 @@ export default function UploadPage() {
     })
   }
 
+  // Input change handler
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target
+    
     if (type === 'checkbox') {
-      const checkbox = e.target as HTMLInputElement
-      setUploadData(prev => ({
-        ...prev,
-        [name]: checkbox.checked
-      }))
+      const checked = (e.target as HTMLInputElement).checked
+      setUploadData(prev => ({ ...prev, [name]: checked }))
     } else {
-      setUploadData(prev => ({
-        ...prev,
-        [name]: value
-      }))
+      setUploadData(prev => ({ ...prev, [name]: value }))
     }
   }
 
-  const handleTagAdd = (tag: string) => {
+  // Tag management
+  const addTag = (tag: string) => {
     if (tag.trim() && !uploadData.tags.includes(tag.trim())) {
       setUploadData(prev => ({
         ...prev,
@@ -193,98 +194,11 @@ export default function UploadPage() {
     }
   }
 
-  const handleTagRemove = (tagToRemove: string) => {
+  const removeTag = (tagToRemove: string) => {
     setUploadData(prev => ({
       ...prev,
       tags: prev.tags.filter(tag => tag !== tagToRemove)
     }))
-  }
-
-  // Main upload and processing function
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!audioFile) {
-      setProcessingStatus({
-        status: 'error',
-        message: 'No audio file selected',
-        progress: 0,
-        error: 'Missing audio file'
-      })
-      return
-    }
-
-    try {
-      setStep(3) // Move to review step
-      setProcessingStatus({
-        status: 'uploading',
-        message: 'Uploading your story...',
-        progress: 20
-      })
-
-      // Prepare story data
-      const storyUploadData: StoryUploadData = {
-        title: uploadData.title,
-        description: uploadData.description,
-        storyteller_name: uploadData.storytellerName,
-        storyteller_bio: uploadData.storytellerBio,
-        language: uploadData.language,
-        origin: uploadData.origin,
-        tags: uploadData.tags,
-        consent_given: uploadData.consentGiven
-      }
-
-      // Upload complete story
-      const uploadResult = await storiesService.uploadCompleteStory(audioFile, storyUploadData)
-      
-      setProcessingStatus({
-        status: 'processing',
-        message: 'Story uploaded! Starting AI transcription and analysis...',
-        progress: 50,
-        storyId: uploadResult.story.id
-      })
-
-      // If processing started, wait a bit and then check for results
-      if (uploadResult.processing_started) {
-        // Poll for processing results
-        setTimeout(async () => {
-          try {
-            await aiService.getStoryAnalysis(uploadResult.story.id)
-            
-            setProcessingStatus({
-              status: 'success',
-              message: 'Story uploaded and processed successfully!',
-              progress: 100,
-              storyId: uploadResult.story.id
-            })
-          } catch {
-            // Processing might still be in progress
-            setProcessingStatus({
-              status: 'processing',
-              message: 'Story uploaded! AI processing is in progress...',
-              progress: 75,
-              storyId: uploadResult.story.id
-            })
-          }
-        }, 5000) // Wait 5 seconds before checking
-      } else {
-        setProcessingStatus({
-          status: 'success',
-          message: 'Story uploaded successfully! (AI processing will continue in background)',
-          progress: 100,
-          storyId: uploadResult.story.id
-        })
-      }
-
-    } catch (error) {
-      console.error('Upload failed:', error)
-      setProcessingStatus({
-        status: 'error',
-        message: 'Upload failed. Please try again.',
-        progress: 0,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      })
-    }
   }
 
   // Try direct transcription for immediate feedback
@@ -340,65 +254,202 @@ export default function UploadPage() {
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-griot-50 to-orange-50">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Header Section */}
-        <header className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Share Your Story
-          </h1>
-          <p className="text-lg text-gray-600 mb-6">
-            Help preserve cultural heritage by sharing oral traditions with the world
-          </p>
-          
-          {/* Swahili Focus Badge */}
-          <div className="inline-flex items-center gap-2 bg-griot-100 text-griot-800 px-4 py-2 rounded-full text-sm font-medium">
-            <span className="text-griot-600">🎯</span>
-            <span><strong>Swahili Focus:</strong> Enhanced support for East African storytelling traditions</span>
-          </div>
-        </header>
+  // Enhanced upload and processing function with real-time progress tracking
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!audioFile) {
+      setProcessingStatus({
+        status: 'error',
+        message: 'No audio file selected',
+        progress: 0,
+        error: 'Missing audio file'
+      })
+      return
+    }
 
-        {/* Progress Steps */}
-        <div className="mb-10">
-          <div className="flex items-center justify-center mb-4">
-            {[1, 2, 3].map((stepNum, index) => (
-              <div key={stepNum} className="flex items-center">
-                {/* Step Circle */}
-                <div className={`
-                  w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm
-                  ${step >= stepNum 
-                    ? 'bg-griot-600 text-white shadow-lg' 
-                    : 'bg-white border-2 border-gray-200 text-gray-400'
-                  }
-                  transition-all duration-300
-                `}>
-                  {stepNum}
-                </div>
-                
-                {/* Connecting Line */}
-                {index < 2 && (
-                  <div className={`
-                    w-16 h-1 mx-2
-                    ${step > stepNum ? 'bg-griot-600' : 'bg-gray-200'}
-                    transition-all duration-300
-                  `} />
-                )}
-              </div>
-            ))}
-          </div>
-          
-          <div className="text-center">
-            <span className="text-sm font-medium text-gray-600">
-              {step === 1 && 'Record or Upload Audio'}
-              {step === 2 && 'Add Story Details'}
-              {step === 3 && 'Processing & Results'}
-            </span>
-          </div>
+    try {
+      setStep(3) // Move to processing step
+      setProcessingStatus({
+        status: 'uploading',
+        message: 'Uploading your story...',
+        progress: 10
+      })
+
+      // Prepare story data
+      const storyUploadData: StoryUploadData = {
+        title: uploadData.title,
+        description: uploadData.description,
+        storyteller_name: uploadData.storytellerName,
+        storyteller_bio: uploadData.storytellerBio,
+        language: uploadData.language,
+        origin: uploadData.origin,
+        tags: uploadData.tags,
+        consent_given: uploadData.consentGiven
+      }
+
+      // Upload complete story
+      const uploadResult = await storiesService.uploadCompleteStory(audioFile, storyUploadData)
+      
+      setProcessingStatus({
+        status: 'processing',
+        message: 'Story uploaded! Starting AI processing...',
+        progress: 20,
+        storyId: uploadResult.story.id
+      })
+
+      // Start real-time progress tracking
+      if (uploadResult.processing_started && uploadResult.story.id) {
+        try {
+          // Add timeout for processing
+          const processingTimeout = setTimeout(() => {
+            setProcessingStatus({
+              status: 'success',
+              message: 'Story uploaded successfully! Processing continues in background.',
+              progress: 100,
+              storyId: uploadResult.story.id
+            })
+          }, 120000) // 2 minutes timeout
+
+          // Start polling for processing status
+          await processingService.pollProcessingStatus(
+            uploadResult.story.id,
+            // On status update
+            (status: ProcessingStatusResponse) => {
+              setProcessingStatus({
+                status: 'processing',
+                message: status.message,
+                progress: status.progress_percentage,
+                storyId: uploadResult.story.id,
+                detailedStatus: status
+              })
+            },
+            // On completion
+            (status: ProcessingStatusResponse) => {
+              clearTimeout(processingTimeout)
+              setProcessingStatus({
+                status: 'success',
+                message: 'Story published successfully! ✨',
+                progress: 100,
+                storyId: uploadResult.story.id,
+                detailedStatus: {
+                  ...status,
+                  current_step: 'published' // Ensure we're in published state
+                }
+              })
+            },
+            // On error
+            (error: string) => {
+              clearTimeout(processingTimeout)
+              setProcessingStatus({
+                status: 'error',
+                message: 'Processing failed',
+                progress: 0,
+                storyId: uploadResult.story.id,
+                error: error
+              })
+            },
+            3000, // Poll every 3 seconds
+            40    // Max 40 retries (2 minutes)
+          )
+        } catch (pollingError) {
+          console.error('Failed to start polling:', pollingError)
+          // Fallback to simple success message
+          setProcessingStatus({
+            status: 'success',
+            message: 'Story uploaded! Processing will continue in background.',
+            progress: 100,
+            storyId: uploadResult.story.id
+          })
+        }
+      } else {
+        setProcessingStatus({
+          status: 'success',
+          message: 'Story uploaded successfully! (AI processing will continue in background)',
+          progress: 100,
+          storyId: uploadResult.story.id
+        })
+      }
+
+    } catch (error) {
+      console.error('Upload failed:', error)
+      setProcessingStatus({
+        status: 'error',
+        message: 'Upload failed. Please try again.',
+        progress: 0,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      })
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Share Your Story</h1>
+          <p className="text-gray-600 max-w-2xl mx-auto">
+            Upload or record your oral tradition and let AI help preserve it for future generations
+          </p>
         </div>
 
-        {/* Status Alert */}
-        {processingStatus.status !== 'idle' && (
+        {/* Progress Stepper - Simple version for steps 1-2 */}
+        {step < 3 && (
+          <div className="mb-10">
+            <div className="flex items-center justify-center mb-4">
+              {[1, 2, 3].map((stepNum, index) => (
+                <div key={stepNum} className="flex items-center">
+                  {/* Step Circle */}
+                  <div className={`
+                    w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm
+                    ${step >= stepNum 
+                      ? 'bg-griot-600 text-white shadow-lg' 
+                      : 'bg-white border-2 border-gray-200 text-gray-400'
+                    }
+                    transition-all duration-300
+                  `}>
+                    {stepNum}
+                  </div>
+                  
+                  {/* Connecting Line */}
+                  {index < 2 && (
+                    <div className={`
+                      w-16 h-1 mx-2
+                      ${step > stepNum ? 'bg-griot-600' : 'bg-gray-200'}
+                      transition-all duration-300
+                    `} />
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            <div className="text-center">
+              <span className="text-sm font-medium text-gray-600">
+                {step === 1 && 'Record or Upload Audio'}
+                {step === 2 && 'Add Story Details'}
+                {step === 3 && 'Processing & Results'}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Detailed Processing Stepper - Only show during processing */}
+        {step === 3 && processingStatus.detailedStatus && (
+          <div className="mb-8">
+            <ProcessingStepperComponent
+              status={{
+                current_step: processingStatus.detailedStatus.current_step,
+                progress_percentage: processingStatus.detailedStatus.progress_percentage,
+                message: processingStatus.detailedStatus.message,
+                error: processingStatus.detailedStatus.error,
+                transcript_text: processingStatus.detailedStatus.transcript_text
+              }}
+            />
+          </div>
+        )}
+
+        {/* Status Alert - Only show if no detailed status or for upload errors */}
+        {(processingStatus.status !== 'idle' && !processingStatus.detailedStatus) && (
           <div className={`
             mb-8 p-4 rounded-xl border shadow-sm
             ${processingStatus.status === 'error' 
@@ -434,7 +485,7 @@ export default function UploadPage() {
               </div>
             </div>
             
-            {processingStatus.progress > 0 && (
+            {processingStatus.progress > 0 && !processingStatus.detailedStatus && (
               <div className="mt-4">
                 <div className="bg-white rounded-full h-2 overflow-hidden">
                   <div 
@@ -455,137 +506,119 @@ export default function UploadPage() {
               <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
                 Record or Upload Your Story
               </h2>
-              
-              {!audioFile ? (
-                <div className="space-y-12">
-                  {/* Upload Section */}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Upload Audio File</h3>
-                    <div
-                      {...getRootProps()}
-                      className={`
-                        relative border-2 border-dashed rounded-xl p-12 text-center cursor-pointer 
-                        transition-all duration-200 ease-in-out
-                        ${isDragActive 
-                          ? 'border-griot-400 bg-griot-50 scale-105' 
-                          : 'border-gray-300 hover:border-griot-400 hover:bg-gray-50'
-                        }
-                      `}
-                    >
-                      <input {...getInputProps()} />
-                      <Upload className="mx-auto w-16 h-16 text-gray-400 mb-4" />
-                      <h4 className="text-xl font-semibold text-gray-900 mb-2">
-                        {isDragActive ? 'Drop the file here' : 'Drop your audio file here'}
-                      </h4>
-                      <p className="text-gray-600 mb-4">or click to select a file</p>
-                      <p className="text-sm text-gray-500">
-                        Supports MP3, WAV, M4A, FLAC, OGG, WebM (max 100MB)
+
+              {/* Upload Section */}
+              <div className="mb-8">
+                <div
+                  {...getRootProps()}
+                  className={`
+                    border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-300
+                    ${isDragActive 
+                      ? 'border-griot-400 bg-griot-50' 
+                      : 'border-gray-300 hover:border-griot-400 hover:bg-gray-50'
+                    }
+                  `}
+                >
+                  <input {...getInputProps()} />
+                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  {isDragActive ? (
+                    <p className="text-griot-600 font-medium">Drop your audio file here</p>
+                  ) : (
+                    <>
+                      <p className="text-gray-900 font-medium mb-2">
+                        Click to browse or drag and drop your audio file
                       </p>
-                    </div>
-                  </div>
-
-                  {/* Divider */}
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-200" />
-                    </div>
-                    <div className="relative flex justify-center">
-                      <span className="bg-white px-4 text-sm font-medium text-gray-500">OR</span>
-                    </div>
-                  </div>
-
-                  {/* Recording Section */}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-6 text-center">Record Live</h3>
-                    <div className="text-center">
-                      {!isRecording ? (
-                        <div className="space-y-4">
-                          <button
-                            onClick={startRecording}
-                            className="
-                              bg-red-500 hover:bg-red-600 text-white rounded-full p-8 
-                              transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-xl
-                            "
-                          >
-                            <Mic className="w-8 h-8" />
-                          </button>
-                          <p className="text-gray-600">Click the microphone to start recording</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-6">
-                          <div className="flex items-center justify-center gap-6">
-                            <div className="bg-red-500 rounded-full p-8 animate-pulse shadow-lg">
-                              <MicOff className="w-8 h-8 text-white" />
-                            </div>
-                            <div className="text-3xl font-mono text-red-600 font-bold">
-                              {formatTime(recordingTime)}
-                            </div>
-                          </div>
-                          <button
-                            onClick={stopRecording}
-                            className="btn-primary"
-                          >
-                            Stop Recording
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                      <p className="text-gray-500 text-sm">
+                        Supports MP3, WAV, M4A, FLAC, OGG, WebM
+                      </p>
+                    </>
+                  )}
                 </div>
-              ) : (
-                /* Audio Preview */
-                <div className="text-center space-y-6">
-                  <div className="bg-gray-50 rounded-xl p-8">
-                    <div className="flex items-center justify-center gap-4 mb-4">
-                      <button
-                        onClick={playAudio}
-                        className="
-                          bg-griot-600 hover:bg-griot-700 text-white rounded-full p-3 
-                          transition-colors shadow-md hover:shadow-lg
-                        "
-                      >
-                        {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
-                      </button>
-                      <div className="text-lg font-medium text-gray-900 truncate max-w-xs">
-                        {audioFile.name}
-                      </div>
-                      <button
-                        onClick={deleteAudio}
-                        className="text-red-600 hover:text-red-700 p-2 rounded-full hover:bg-red-50 transition-colors"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
+              </div>
+
+              {/* OR Divider */}
+              <div className="flex items-center my-8">
+                <div className="flex-1 border-t border-gray-300"></div>
+                <span className="bg-white px-4 text-gray-500 text-sm">OR</span>
+                <div className="flex-1 border-t border-gray-300"></div>
+              </div>
+
+              {/* Recording Section */}
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Record Your Story</h3>
+                
+                {!isRecording ? (
+                  <button
+                    onClick={startRecording}
+                    className="btn-primary inline-flex items-center gap-2"
+                  >
+                    <Mic size={20} />
+                    Start Recording
+                  </button>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-center gap-4">
+                      <div className="w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
+                      <span className="text-lg font-medium text-gray-900">
+                        Recording: {formatTime(recordingTime)}
+                      </span>
                     </div>
-                    
-                    <div className="text-sm text-gray-500 space-x-4">
-                      <span>Size: {mediaService.formatFileSize(audioFile.size)}</span>
-                      <span>•</span>
-                      <span>Est. Duration: {mediaService.formatDuration(mediaService.estimateAudioDuration(audioFile))}</span>
-                    </div>
-                    
-                    {audioUrl && (
-                      <audio
-                        ref={audioRef}
-                        src={audioUrl}
-                        onEnded={() => setIsPlaying(false)}
-                        className="hidden"
-                      />
-                    )}
+                    <button
+                      onClick={stopRecording}
+                      className="btn-secondary inline-flex items-center gap-2"
+                    >
+                      <MicOff size={20} />
+                      Stop Recording
+                    </button>
                   </div>
+                )}
+              </div>
+
+              {/* Audio Preview */}
+              {audioUrl && (
+                <div className="mt-8 p-6 bg-gray-50 rounded-xl">
+                  <h3 className="font-semibold text-gray-900 mb-4">Audio Preview</h3>
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={playAudio}
+                      className="w-12 h-12 bg-griot-600 text-white rounded-full flex items-center justify-center hover:bg-griot-700 transition-colors"
+                    >
+                      {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+                    </button>
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-600 mb-1">
+                        {audioFile?.name || 'Recorded Audio'}
+                      </p>
+                      <div className="text-xs text-gray-500">
+                        Size: {audioFile ? (audioFile.size / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={deleteAudio}
+                      className="text-red-600 hover:text-red-800 transition-colors"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  </div>
+                  <audio
+                    ref={audioRef}
+                    src={audioUrl}
+                    onEnded={() => setIsPlaying(false)}
+                    className="hidden"
+                  />
                   
-                  <div className="flex justify-center gap-4">
+                  <div className="mt-4 flex justify-between">
                     <button
                       onClick={handleQuickTranscribe}
-                      className="btn-secondary"
-                      disabled={processingStatus.status === 'processing'}
+                      className="text-sm text-griot-600 hover:text-griot-800 transition-colors"
                     >
-                      Quick Transcribe
+                      Quick Transcribe Preview
                     </button>
                     <button
                       onClick={() => setStep(2)}
                       className="btn-primary"
                     >
-                      Continue to Story Details
+                      Continue
                     </button>
                   </div>
                 </div>
@@ -593,160 +626,174 @@ export default function UploadPage() {
             </div>
           )}
 
-          {/* Step 2: Story Details */}
+          {/* Step 2: Story Details Form */}
           {step === 2 && (
             <div className="p-8 lg:p-12">
               <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
-                Add Story Details
+                Tell Us About Your Story
               </h2>
-              
-              <form onSubmit={handleSubmit} className="space-y-8">
-                {/* Title & Language Row */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-gray-700">
-                      Story Title <span className="text-red-500">*</span>
+
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Title */}
+                <div>
+                  <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
+                    Story Title *
+                  </label>
+                  <input
+                    type="text"
+                    id="title"
+                    name="title"
+                    required
+                    className="input-field"
+                    placeholder="Enter the title of your story"
+                    value={uploadData.title}
+                    onChange={handleInputChange}
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+                    Story Description *
+                  </label>
+                  <textarea
+                    id="description"
+                    name="description"
+                    required
+                    rows={4}
+                    className="input-field resize-none"
+                    placeholder="Describe what this story is about, its significance, and any context that would help listeners understand it better"
+                    value={uploadData.description}
+                    onChange={handleInputChange}
+                  />
+                </div>
+
+                {/* Storyteller Info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label htmlFor="storytellerName" className="block text-sm font-medium text-gray-700 mb-2">
+                      Storyteller Name
                     </label>
                     <input
                       type="text"
-                      name="title"
-                      required
+                      id="storytellerName"
+                      name="storytellerName"
                       className="input-field"
-                      value={uploadData.title}
+                      placeholder="Name of the person telling the story"
+                      value={uploadData.storytellerName}
                       onChange={handleInputChange}
-                      placeholder="Enter a descriptive title"
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-gray-700">
-                      Language <span className="text-red-500">*</span>
+                  <div>
+                    <label htmlFor="language" className="block text-sm font-medium text-gray-700 mb-2">
+                      Language *
                     </label>
                     <select
+                      id="language"
                       name="language"
                       required
                       className="input-field"
                       value={uploadData.language}
                       onChange={handleInputChange}
                     >
-                      <option value="">Select language</option>
-                      {supportedLanguages.map((lang) => (
+                      {supportedLanguages.map(lang => (
                         <option key={lang.code} value={lang.code}>
-                          {lang.recommended ? '⭐ ' : ''}{lang.name} ({lang.nativeName})
+                          {lang.name}
                         </option>
                       ))}
                     </select>
                   </div>
                 </div>
 
-                {/* Description */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-gray-700">
-                    Story Description <span className="text-red-500">*</span>
+                {/* Origin */}
+                <div>
+                  <label htmlFor="origin" className="block text-sm font-medium text-gray-700 mb-2">
+                    Geographic Origin
                   </label>
-                  <textarea
-                    name="description"
-                    required
-                    rows={4}
-                    className="input-field resize-none"
-                    value={uploadData.description}
-                    onChange={handleInputChange}
-                    placeholder="Describe the story, its cultural significance, and any important context"
-                  />
-                </div>
-
-                {/* Storyteller & Origin Row */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-gray-700">
-                      Storyteller Name
-                    </label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                     <input
                       type="text"
-                      name="storytellerName"
-                      className="input-field"
-                      value={uploadData.storytellerName}
+                      id="origin"
+                      name="origin"
+                      className="input-field pl-10"
+                      placeholder="e.g., Nairobi, Kenya or Zanzibar, Tanzania"
+                      value={uploadData.origin}
                       onChange={handleInputChange}
-                      placeholder="Name or alias"
                     />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-gray-700">
-                      Origin/Location
-                    </label>
-                    <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                      <input
-                        type="text"
-                        name="origin"
-                        className="input-field pl-10"
-                        value={uploadData.origin}
-                        onChange={handleInputChange}
-                        placeholder="City, Country or Region"
-                      />
-                    </div>
                   </div>
                 </div>
 
                 {/* Storyteller Bio */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-gray-700">
-                    Storyteller Bio <span className="text-gray-500">(Optional)</span>
+                <div>
+                  <label htmlFor="storytellerBio" className="block text-sm font-medium text-gray-700 mb-2">
+                    About the Storyteller
                   </label>
                   <textarea
+                    id="storytellerBio"
                     name="storytellerBio"
                     rows={3}
                     className="input-field resize-none"
+                    placeholder="Brief background about the storyteller (optional)"
                     value={uploadData.storytellerBio}
                     onChange={handleInputChange}
-                    placeholder="Brief background about the storyteller"
                   />
                 </div>
 
                 {/* Tags */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-gray-700">
-                    Tags <span className="text-gray-500">(Press Enter to add)</span>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tags
                   </label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    placeholder="e.g. folklore, creation myth, wisdom tale, hadithi, methali"
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        const input = e.target as HTMLInputElement
-                        handleTagAdd(input.value)
-                        input.value = ''
-                      }
-                    }}
-                  />
-                  {uploadData.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      {uploadData.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="
-                            inline-flex items-center gap-2 bg-griot-100 text-griot-700 
-                            px-3 py-1 rounded-full text-sm font-medium
-                          "
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {uploadData.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 bg-griot-100 text-griot-700 px-3 py-1 rounded-full text-sm"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => removeTag(tag)}
+                          className="text-griot-600 hover:text-griot-800"
                         >
-                          {tag}
-                          <button
-                            type="button"
-                            onClick={() => handleTagRemove(tag)}
-                            className="text-griot-500 hover:text-griot-700 font-bold"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Add a tag"
+                      className="input-field flex-1"
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          addTag(e.currentTarget.value)
+                          e.currentTarget.value = ''
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        const input = e.currentTarget.previousElementSibling as HTMLInputElement
+                        addTag(input.value)
+                        input.value = ''
+                      }}
+                      className="btn-secondary"
+                    >
+                      Add Tag
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Suggested: folklore, traditional, wisdom, family story, legend, historical
+                  </p>
                 </div>
 
-                {/* Consent Checkbox */}
+                {/* Consent */}
                 <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
                   <input
                     type="checkbox"
@@ -791,61 +838,45 @@ export default function UploadPage() {
           {step === 3 && (
             <div className="p-8 lg:p-12">
               <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
-                Upload Complete
+                Story Summary
               </h2>
-              
-              <div className="space-y-8">
-                {/* Audio Review */}
-                <div className="pb-6 border-b border-gray-200">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Audio File</h3>
-                  <div className="bg-gray-50 rounded-lg p-4 flex items-center gap-4">
-                    <button
-                      onClick={playAudio}
-                      className="
-                        bg-griot-600 hover:bg-griot-700 text-white rounded-full p-2 
-                        transition-colors shadow-sm
-                      "
-                    >
-                      {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                    </button>
-                    <span className="font-medium text-gray-900 truncate">
-                      {audioFile?.name}
-                    </span>
+
+              <div className="space-y-6 mb-8">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{uploadData.title}</h3>
+                  <p className="text-gray-700 leading-relaxed">{uploadData.description}</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-2">Story Details</h4>
+                    <div className="space-y-1 text-gray-600">
+                      <p><span className="font-medium">Language:</span> {supportedLanguages.find(l => l.code === uploadData.language)?.name}</p>
+                      {uploadData.storytellerName && (
+                        <p><span className="font-medium">Storyteller:</span> {uploadData.storytellerName}</p>
+                      )}
+                      {uploadData.origin && (
+                        <p><span className="font-medium">Origin:</span> {uploadData.origin}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-2">Audio File</h4>
+                    <div className="space-y-1 text-gray-600">
+                      <p><span className="font-medium">File:</span> {audioFile?.name}</p>
+                      <p><span className="font-medium">Size:</span> {audioFile ? (audioFile.size / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown'}</p>
+                      <p><span className="font-medium">Type:</span> {audioFile?.type}</p>
+                    </div>
                   </div>
                 </div>
 
-                {/* Story Details Review */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="text-sm font-semibold text-gray-700 mb-1">Title</h4>
-                      <p className="text-gray-900">{uploadData.title}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-semibold text-gray-700 mb-1">Language</h4>
-                      <p className="text-gray-900">{aiService.getLanguageName(uploadData.language)}</p>
-                    </div>
-                    {uploadData.storytellerName && (
-                      <div>
-                        <h4 className="text-sm font-semibold text-gray-700 mb-1">Storyteller</h4>
-                        <p className="text-gray-900">{uploadData.storytellerName}</p>
-                      </div>
-                    )}
+                {uploadData.storytellerBio && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">About the Storyteller</h4>
+                    <p className="text-sm text-gray-600 leading-relaxed">{uploadData.storytellerBio}</p>
                   </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="text-sm font-semibold text-gray-700 mb-1">Description</h4>
-                      <p className="text-gray-900 text-sm leading-relaxed">{uploadData.description}</p>
-                    </div>
-                    {uploadData.origin && (
-                      <div>
-                        <h4 className="text-sm font-semibold text-gray-700 mb-1">Origin</h4>
-                        <p className="text-gray-900">{uploadData.origin}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                )}
 
                 {uploadData.tags.length > 0 && (
                   <div>
@@ -860,12 +891,15 @@ export default function UploadPage() {
                   </div>
                 )}
 
-                {processingStatus.status === 'success' && processingStatus.storyId && (
+                {/* Success State */}
+                {(processingStatus.status === 'success' || 
+                  (processingStatus.detailedStatus && processingStatus.detailedStatus.current_step === 'published')) && 
+                 processingStatus.storyId && (
                   <div className="pt-6 border-t border-gray-200">
                     <div className="bg-green-50 border border-green-200 rounded-xl p-6">
                       <h4 className="text-lg font-semibold text-green-800 mb-2">🎉 Success!</h4>
                       <p className="text-green-700 mb-4 leading-relaxed">
-                        Your story has been uploaded and AI processing has started. You can view the results once processing is complete.
+                        Your story has been uploaded and processed successfully! You can now view it and share it with the world.
                       </p>
                       <div className="flex gap-4">
                         <button
@@ -885,7 +919,46 @@ export default function UploadPage() {
                   </div>
                 )}
 
-                {processingStatus.status !== 'success' && (
+                {/* Debug Info */}
+                {processingStatus.storyId && import.meta.env.DEV && (
+                  <div className="pt-4 border-t border-gray-100">
+                    <details className="text-xs text-gray-500">
+                      <summary className="cursor-pointer hover:text-gray-700">Debug Info</summary>
+                      <div className="mt-2 p-2 bg-gray-100 rounded text-xs">
+                        <p><strong>Status:</strong> {processingStatus.status}</p>
+                        <p><strong>Story ID:</strong> {processingStatus.storyId}</p>
+                        {processingStatus.detailedStatus && (
+                          <>
+                            <p><strong>Current Step:</strong> {processingStatus.detailedStatus.current_step}</p>
+                            <p><strong>Progress:</strong> {processingStatus.detailedStatus.progress_percentage}%</p>
+                            <p><strong>Message:</strong> {processingStatus.detailedStatus.message}</p>
+                          </>
+                        )}
+                        <button
+                          onClick={async () => {
+                            try {
+                              const response = await fetch(`/api/v1/ai/debug/story/${processingStatus.storyId}`, {
+                                headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+                              })
+                              const debug = await response.json()
+                              console.log('Debug info:', debug)
+                              alert('Debug info logged to console')
+                            } catch (error) {
+                              console.error('Debug failed:', error)
+                            }
+                          }}
+                          className="mt-2 text-blue-600 hover:text-blue-800 underline"
+                        >
+                          Check Debug Info
+                        </button>
+                      </div>
+                    </details>
+                  </div>
+                )}
+
+                {/* Action Buttons - Only show if not in final success state */}
+                {!(processingStatus.status === 'success' || 
+                   (processingStatus.detailedStatus && processingStatus.detailedStatus.current_step === 'published')) && (
                   <div className="flex justify-between pt-6 border-t border-gray-200">
                     <button
                       type="button"
@@ -897,9 +970,10 @@ export default function UploadPage() {
                     <button
                       onClick={handleSubmit}
                       className="btn-primary"
-                      disabled={processingStatus.status === 'uploading'}
+                      disabled={processingStatus.status === 'uploading' || processingStatus.status === 'processing'}
                     >
-                      {processingStatus.status === 'uploading' ? 'Uploading...' : 'Upload Story'}
+                      {processingStatus.status === 'uploading' ? 'Uploading...' : 
+                       processingStatus.status === 'processing' ? 'Processing...' : 'Upload Story'}
                     </button>
                   </div>
                 )}
