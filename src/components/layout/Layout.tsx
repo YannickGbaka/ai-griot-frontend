@@ -27,7 +27,7 @@ export default function Layout({ children }: LayoutProps) {
               <div className="w-8 h-8 bg-griot-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-lg">G</span>
               </div>
-              <span className="text-xl font-bold text-gray-900">Digital Griot</span>
+              <span className="text-xl font-bold text-gray-900">StoryGriot AI</span>
             </Link>
 
             {/* Desktop Navigation */}
@@ -159,7 +159,7 @@ export default function Layout({ children }: LayoutProps) {
                 <div className="w-8 h-8 bg-griot-600 rounded-lg flex items-center justify-center">
                   <span className="text-white font-bold text-lg">G</span>
                 </div>
-                <span className="text-xl font-bold">Digital Griot</span>
+                <span className="text-xl font-bold">StoryGriot AI</span>
               </div>
               <p className="text-gray-400 max-w-md">
                 Preserving oral traditions and cultural heritage for future generations through the power of AI and community collaboration.
@@ -186,7 +186,7 @@ export default function Layout({ children }: LayoutProps) {
           </div>
           
           <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-            <p>&copy; 2024 Digital Griot. Preserving cultural heritage with technology.</p>
+            <p>&copy; 2024 StoryGriot AI. Preserving cultural heritage with technology.</p>
           </div>
         </div>
       </footer>
