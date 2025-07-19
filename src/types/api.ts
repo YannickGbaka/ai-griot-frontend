@@ -68,6 +68,10 @@ export interface StoryCreate {
   storyteller_bio?: string
   language: string
   origin: string
+  audio_file_url?: string  // Audio file URL from upload
+  file_size_bytes?: number  // File size in bytes
+  duration_seconds?: number  // Audio duration in seconds
+  consent_given?: boolean  // User consent for sharing
 }
 
 export interface StoryUpdate {

@@ -1,19 +1,48 @@
 import { apiClient } from './api'
-import { MediaUploadResponse } from '../types/api'
+
+export interface MediaUploadResponse {
+  audio_url: string
+  file_size: number
+  story_id: string
+  message: string
+}
+
+export interface AudioUploadResponse {
+  message: string
+  audio_url: string
+  file_size: number
+  story_id: string
+}
 
 export class MediaService {
-  async uploadAudioFile(file: File, storyId: string): Promise<MediaUploadResponse> {
+  // Generic file upload for media
+  async uploadFile(file: File): Promise<{ file_url: string; message: string }> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await apiClient.postFormData<{ file_url: string; message: string }>('/media/upload', formData)
+    return response
+  }
+
+  // Upload audio file for an existing story
+  async uploadAudioFile(file: File, storyId: string): Promise<AudioUploadResponse> {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('story_id', storyId)
 
-    const response = await apiClient.postFormData<MediaUploadResponse>('/media/upload-audio', formData)
+    const response = await apiClient.postFormData<AudioUploadResponse>('/media/upload-audio', formData)
+    return response
+  }
+
+  // Get audio URL for a story
+  async getAudioUrl(storyId: string): Promise<{ audio_url: string; expires_in: number; story_id: string }> {
+    const response = await apiClient.get<{ audio_url: string; expires_in: number; story_id: string }>(`/media/audio/${storyId}`)
     return response
   }
 
   async validateAudioFile(file: File): Promise<{ isValid: boolean; error?: string }> {
     const maxSizeBytes = 100 * 1024 * 1024 // 100MB
-    const allowedFormats = ['.mp3', '.wav', '.m4a', '.flac', '.ogg']
+    const allowedFormats = ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.webm']
     
     // Check file size
     if (file.size > maxSizeBytes) {
@@ -40,10 +69,11 @@ export class MediaService {
       'audio/wav',
       'audio/mp4',
       'audio/flac',
-      'audio/ogg'
+      'audio/ogg',
+      'audio/webm'
     ]
     
-    if (!allowedMimeTypes.includes(file.type)) {
+    if (file.type && !allowedMimeTypes.includes(file.type)) {
       return {
         isValid: false,
         error: 'Invalid file type detected'
@@ -73,6 +103,14 @@ export class MediaService {
     } else {
       return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
     }
+  }
+
+  // Estimate duration from file size (rough approximation)
+  estimateAudioDuration(file: File): number {
+    // Very rough estimate: assume 128kbps MP3 encoding
+    // 128kbps = 16KB/s, so duration ≈ file_size_bytes / 16000
+    const estimatedSeconds = Math.round(file.size / 16000)
+    return Math.max(1, estimatedSeconds) // At least 1 second
   }
 }
 

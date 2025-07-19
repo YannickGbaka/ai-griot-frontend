@@ -1,6 +1,9 @@
 import { useState, useRef } from 'react'
-import { Upload, Mic, MicOff, Play, Pause, Trash2, MapPin } from 'lucide-react'
+import { Upload, Mic, MicOff, Play, Pause, Trash2, MapPin, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
+import { storiesService, type StoryUploadData } from '../services/storiesService'
+import { mediaService } from '../services/mediaService'
+import { aiService, type TranscriptionResponse } from '../services/aiService'
 
 interface UploadData {
   title: string
@@ -13,6 +16,18 @@ interface UploadData {
   consentGiven: boolean
 }
 
+// Upload progress states
+type UploadStatus = 'idle' | 'uploading' | 'processing' | 'success' | 'error'
+
+interface ProcessingStatus {
+  status: UploadStatus
+  message: string
+  progress: number
+  storyId?: string
+  transcription?: TranscriptionResponse
+  error?: string
+}
+
 export default function UploadPage() {
   const [step, setStep] = useState(1)
   const [audioFile, setAudioFile] = useState<File | null>(null)
@@ -20,12 +35,18 @@ export default function UploadPage() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
+    status: 'idle',
+    message: '',
+    progress: 0
+  })
+  
   const [uploadData, setUploadData] = useState<UploadData>({
     title: '',
     description: '',
     storytellerName: '',
     storytellerBio: '',
-    language: '',
+    language: 'sw-KE', // Default to Swahili (Kenya)
     origin: '',
     tags: [],
     consentGiven: false
@@ -35,20 +56,42 @@ export default function UploadPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const intervalRef = useRef<number | null>(null)
 
+  // Get supported languages with Swahili prioritized
+  const supportedLanguages = aiService.getSupportedLanguages()
+
   // File upload with dropzone
-  const onDrop = (acceptedFiles: File[]) => {
+  const onDrop = async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
     if (file && file.type.startsWith('audio/')) {
+      // Validate file
+      const validation = await mediaService.validateAudioFile(file)
+      if (!validation.isValid) {
+        setProcessingStatus({
+          status: 'error',
+          message: validation.error || 'Invalid file',
+          progress: 0,
+          error: validation.error
+        })
+        return
+      }
+
       setAudioFile(file)
       setAudioUrl(URL.createObjectURL(file))
       setStep(2)
+      
+      // Clear any previous errors
+      setProcessingStatus({
+        status: 'idle',
+        message: '',
+        progress: 0
+      })
     }
   }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'audio/*': ['.mp3', '.wav', '.m4a', '.flac', '.ogg']
+      'audio/*': ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.webm']
     },
     multiple: false
   })
@@ -82,6 +125,12 @@ export default function UploadPage() {
       }, 1000)
     } catch (error) {
       console.error('Error accessing microphone:', error)
+      setProcessingStatus({
+        status: 'error',
+        message: 'Failed to access microphone. Please check permissions.',
+        progress: 0,
+        error: 'Microphone access denied'
+      })
     }
   }
 
@@ -112,6 +161,11 @@ export default function UploadPage() {
     setAudioUrl(null)
     setStep(1)
     setRecordingTime(0)
+    setProcessingStatus({
+      status: 'idle',
+      message: '',
+      progress: 0
+    })
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -146,16 +200,144 @@ export default function UploadPage() {
     }))
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Main upload and processing function
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: Implement upload logic
-    console.log('Upload data:', { audioFile, uploadData })
+    
+    if (!audioFile) {
+      setProcessingStatus({
+        status: 'error',
+        message: 'No audio file selected',
+        progress: 0,
+        error: 'Missing audio file'
+      })
+      return
+    }
+
+    try {
+      setStep(3) // Move to review step
+      setProcessingStatus({
+        status: 'uploading',
+        message: 'Uploading your story...',
+        progress: 20
+      })
+
+      // Prepare story data
+      const storyUploadData: StoryUploadData = {
+        title: uploadData.title,
+        description: uploadData.description,
+        storyteller_name: uploadData.storytellerName,
+        storyteller_bio: uploadData.storytellerBio,
+        language: uploadData.language,
+        origin: uploadData.origin,
+        tags: uploadData.tags,
+        consent_given: uploadData.consentGiven
+      }
+
+      // Upload complete story
+      const uploadResult = await storiesService.uploadCompleteStory(audioFile, storyUploadData)
+      
+      setProcessingStatus({
+        status: 'processing',
+        message: 'Story uploaded! Starting AI transcription and analysis...',
+        progress: 50,
+        storyId: uploadResult.story.id
+      })
+
+      // If processing started, wait a bit and then check for results
+      if (uploadResult.processing_started) {
+        // Poll for processing results
+        setTimeout(async () => {
+          try {
+            await aiService.getStoryAnalysis(uploadResult.story.id)
+            
+            setProcessingStatus({
+              status: 'success',
+              message: 'Story uploaded and processed successfully!',
+              progress: 100,
+              storyId: uploadResult.story.id
+            })
+          } catch {
+            // Processing might still be in progress
+            setProcessingStatus({
+              status: 'processing',
+              message: 'Story uploaded! AI processing is in progress...',
+              progress: 75,
+              storyId: uploadResult.story.id
+            })
+          }
+        }, 5000) // Wait 5 seconds before checking
+      } else {
+        setProcessingStatus({
+          status: 'success',
+          message: 'Story uploaded successfully! (AI processing will continue in background)',
+          progress: 100,
+          storyId: uploadResult.story.id
+        })
+      }
+
+    } catch (error) {
+      console.error('Upload failed:', error)
+      setProcessingStatus({
+        status: 'error',
+        message: 'Upload failed. Please try again.',
+        progress: 0,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      })
+    }
+  }
+
+  // Try direct transcription for immediate feedback
+  const handleQuickTranscribe = async () => {
+    if (!audioFile) return
+
+    try {
+      setProcessingStatus({
+        status: 'processing',
+        message: 'Transcribing audio...',
+        progress: 30
+      })
+
+      const transcription = await aiService.transcribeAudioFile(
+        audioFile, 
+        uploadData.language, 
+        true // enhance
+      )
+
+      setProcessingStatus({
+        status: 'success',
+        message: 'Transcription complete!',
+        progress: 100,
+        transcription
+      })
+    } catch (error) {
+      setProcessingStatus({
+        status: 'error',
+        message: 'Transcription failed',
+        progress: 0,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      })
+    }
   }
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const getStatusIcon = () => {
+    switch (processingStatus.status) {
+      case 'uploading':
+      case 'processing':
+        return <Loader2 className="animate-spin" size={20} />
+      case 'success':
+        return <CheckCircle className="text-green-600" size={20} />
+      case 'error':
+        return <AlertCircle className="text-red-600" size={20} />
+      default:
+        return null
+    }
   }
 
   return (
@@ -167,6 +349,9 @@ export default function UploadPage() {
           <p className="text-lg text-gray-600">
             Help preserve cultural heritage by sharing oral traditions with the world
           </p>
+          <div className="mt-4 text-sm text-griot-600 bg-griot-50 p-3 rounded-lg max-w-md mx-auto">
+            <strong>🎯 Swahili Focus:</strong> Enhanced support for East African storytelling traditions
+          </div>
         </div>
 
         {/* Progress Bar */}
@@ -187,9 +372,45 @@ export default function UploadPage() {
           <div className="text-center text-sm text-gray-600">
             {step === 1 && 'Record or Upload Audio'}
             {step === 2 && 'Add Story Details'}
-            {step === 3 && 'Review & Submit'}
+            {step === 3 && 'Processing & Results'}
           </div>
         </div>
+
+        {/* Status Display */}
+        {processingStatus.status !== 'idle' && (
+          <div className={`mb-6 p-4 rounded-lg border ${
+            processingStatus.status === 'error' ? 'bg-red-50 border-red-200' :
+            processingStatus.status === 'success' ? 'bg-green-50 border-green-200' :
+            'bg-blue-50 border-blue-200'
+          }`}>
+            <div className="flex items-center space-x-3">
+              {getStatusIcon()}
+              <div className="flex-1">
+                <p className="font-medium">{processingStatus.message}</p>
+                {processingStatus.error && (
+                  <p className="text-sm text-red-600 mt-1">{processingStatus.error}</p>
+                )}
+                {processingStatus.transcription && (
+                  <div className="mt-3 p-3 bg-white rounded border">
+                    <h4 className="font-medium text-sm mb-2">Transcription Preview:</h4>
+                    <p className="text-sm">{processingStatus.transcription.transcript.enhanced_text || processingStatus.transcription.transcript.text}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Confidence: {Math.round(processingStatus.transcription.transcript.confidence * 100)}%
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+            {processingStatus.progress > 0 && (
+              <div className="mt-3 bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-griot-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${processingStatus.progress}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Step 1: Audio Upload/Recording */}
         {step === 1 && (
@@ -216,7 +437,7 @@ export default function UploadPage() {
                       or click to select a file
                     </p>
                     <p className="text-xs text-gray-500">
-                      Supports MP3, WAV, M4A, FLAC, OGG (max 100MB)
+                      Supports MP3, WAV, M4A, FLAC, OGG, WebM (max 100MB)
                     </p>
                   </div>
                 </div>
@@ -281,6 +502,10 @@ export default function UploadPage() {
                       <Trash2 size={20} />
                     </button>
                   </div>
+                  <div className="text-sm text-gray-600 mb-4">
+                    Size: {mediaService.formatFileSize(audioFile.size)} • 
+                    Est. Duration: {mediaService.formatDuration(mediaService.estimateAudioDuration(audioFile))}
+                  </div>
                   {audioUrl && (
                     <audio
                       ref={audioRef}
@@ -290,12 +515,21 @@ export default function UploadPage() {
                     />
                   )}
                 </div>
-                <button
-                  onClick={() => setStep(2)}
-                  className="btn-primary"
-                >
-                  Continue to Story Details
-                </button>
+                <div className="flex justify-center space-x-4">
+                  <button
+                    onClick={handleQuickTranscribe}
+                    className="btn-secondary"
+                    disabled={processingStatus.status === 'processing'}
+                  >
+                    Quick Transcribe
+                  </button>
+                  <button
+                    onClick={() => setStep(2)}
+                    className="btn-primary"
+                  >
+                    Continue to Story Details
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -335,14 +569,11 @@ export default function UploadPage() {
                     onChange={handleInputChange}
                   >
                     <option value="">Select language</option>
-                    <option value="English">English</option>
-                    <option value="Spanish">Español</option>
-                    <option value="French">Français</option>
-                    <option value="Arabic">العربية</option>
-                    <option value="Mandarin">中文</option>
-                    <option value="Hindi">हिन्दी</option>
-                    <option value="Portuguese">Português</option>
-                    <option value="Other">Other</option>
+                    {supportedLanguages.map((lang) => (
+                      <option key={lang.code} value={lang.code}>
+                        {lang.recommended ? '⭐ ' : ''}{lang.name} ({lang.nativeName})
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -416,7 +647,7 @@ export default function UploadPage() {
                 <input
                   type="text"
                   className="input-field"
-                  placeholder="e.g. folklore, creation myth, wisdom tale"
+                  placeholder="e.g. folklore, creation myth, wisdom tale, hadithi, methali"
                   onKeyPress={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault()
@@ -469,22 +700,21 @@ export default function UploadPage() {
                   Back to Audio
                 </button>
                 <button
-                  type="button"
-                  onClick={() => setStep(3)}
+                  type="submit"
                   className="btn-primary"
-                  disabled={!uploadData.title || !uploadData.description || !uploadData.language || !uploadData.consentGiven}
+                  disabled={!uploadData.title || !uploadData.description || !uploadData.language || !uploadData.consentGiven || processingStatus.status === 'uploading'}
                 >
-                  Review Submission
+                  {processingStatus.status === 'uploading' ? 'Uploading...' : 'Upload Story'}
                 </button>
               </div>
             </form>
           </div>
         )}
 
-        {/* Step 3: Review & Submit */}
+        {/* Step 3: Processing & Results */}
         {step === 3 && (
           <div className="bg-white rounded-lg shadow-md p-8">
-            <h2 className="text-2xl font-semibold mb-6">Review Your Submission</h2>
+            <h2 className="text-2xl font-semibold mb-6">Upload Complete</h2>
             
             <div className="space-y-6">
               {/* Audio Review */}
@@ -514,7 +744,7 @@ export default function UploadPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <h4 className="font-medium text-gray-700">Language</h4>
-                    <p>{uploadData.language}</p>
+                    <p>{aiService.getLanguageName(uploadData.language)}</p>
                   </div>
                   <div>
                     <h4 className="font-medium text-gray-700">Origin</h4>
@@ -541,21 +771,49 @@ export default function UploadPage() {
                 )}
               </div>
 
-              <div className="flex justify-between pt-6 border-t">
-                <button
-                  type="button"
-                  onClick={() => setStep(2)}
-                  className="btn-secondary"
-                >
-                  Edit Details
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  className="btn-primary"
-                >
-                  Submit Story
-                </button>
-              </div>
+              {processingStatus.status === 'success' && processingStatus.storyId && (
+                <div className="border-t pt-6">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h4 className="font-medium text-green-800 mb-2">🎉 Success!</h4>
+                    <p className="text-green-700 mb-3">
+                      Your story has been uploaded and AI processing has started. You can view the results once processing is complete.
+                    </p>
+                    <div className="flex space-x-4">
+                      <button
+                        onClick={() => window.location.href = `/stories/${processingStatus.storyId}`}
+                        className="btn-primary"
+                      >
+                        View Story
+                      </button>
+                      <button
+                        onClick={() => window.location.reload()}
+                        className="btn-secondary"
+                      >
+                        Upload Another
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {processingStatus.status !== 'success' && (
+                <div className="flex justify-between pt-6 border-t">
+                  <button
+                    type="button"
+                    onClick={() => setStep(2)}
+                    className="btn-secondary"
+                  >
+                    Edit Details
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    className="btn-primary"
+                    disabled={processingStatus.status === 'uploading'}
+                  >
+                    {processingStatus.status === 'uploading' ? 'Uploading...' : 'Upload Story'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
