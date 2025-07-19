@@ -75,7 +75,7 @@ export default function SignUpPage() {
           </div>
         </div>
         <h2 className="mt-6 text-center text-3xl font-bold text-gray-900">
-          Join Digital Griot
+          Join StoryGriot AI
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Start preserving and sharing oral traditions

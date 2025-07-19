@@ -54,7 +54,7 @@ export default function LoginPage() {
           Welcome back
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          Sign in to your Digital Griot account
+          Sign in to your StoryGriot AI account
         </p>
       </div>
 
