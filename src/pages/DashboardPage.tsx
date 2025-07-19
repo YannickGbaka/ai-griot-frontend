@@ -319,15 +319,13 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="flex items-center gap-2 ml-4">
-                      {story.status === StoryStatus.PUBLISHED && (
-                        <Link
-                          to={`/stories/${story.id}`}
-                          className="p-2 text-gray-500 hover:text-griot-600 hover:bg-gray-100 rounded-lg transition-colors"
-                          title="View Story"
-                        >
-                          <Eye size={18} />
-                        </Link>
-                      )}
+                      <Link
+                        to={`/stories/${story.id}`}
+                        className="p-2 text-gray-500 hover:text-griot-600 hover:bg-gray-100 rounded-lg transition-colors"
+                        title="View Story"
+                      >
+                        <Eye size={18} />
+                      </Link>
                       <button
                         className="p-2 text-gray-500 hover:text-griot-600 hover:bg-gray-100 rounded-lg transition-colors"
                         title="Edit Story (Coming Soon)"

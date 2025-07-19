@@ -49,6 +49,8 @@ export default function AudioPlayer({
     }
     const handleError = () => {
       setIsLoading(false)
+      console.error('Audio failed to load:', audioUrl)
+      console.error('Audio element error:', audioRef.current?.error)
       setError('Failed to load audio')
     }
     const handleTimeUpdate = () => {

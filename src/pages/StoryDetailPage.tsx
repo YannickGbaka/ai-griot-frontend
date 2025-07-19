@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { MapPin, Clock, User, Tag, Star, ChevronDown, ChevronUp, Loader2, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react'
+import { MapPin, Clock, User, Tag, Star, ChevronDown, ChevronUp, Loader2, AlertCircle, RefreshCw, ArrowLeft, XCircle } from 'lucide-react'
 import { storiesService } from '../services/storiesService'
 import { mediaService } from '../services/mediaService'
 import { StoryResponse } from '../types/api'
@@ -13,6 +13,7 @@ export default function StoryDetailPage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [audioError, setAudioError] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState(0)
   const [showFullDescription, setShowFullDescription] = useState(false)
   const [showStorytellerBio, setShowStorytellerBio] = useState(false)
@@ -36,12 +37,14 @@ export default function StoryDetailPage() {
         // Get audio URL if story has audio
         if (storyData.audio_file_url) {
           try {
+            setAudioError(null)
             const audioResponse = await mediaService.getAudioUrl(storyData.id)
             setAudioUrl(audioResponse.audio_url)
           } catch (audioError) {
-            console.warn('Failed to get audio URL:', audioError)
-            // Use the original URL as fallback
-            setAudioUrl(storyData.audio_file_url)
+            console.error('Failed to get audio URL:', audioError)
+            // Don't use the raw audio_file_url as fallback since it's just a file path, not a valid URL
+            setAudioUrl(null)
+            setAudioError(audioError instanceof Error ? audioError.message : 'Failed to load audio file')
           }
         }
       } catch (err: unknown) {
@@ -260,8 +263,56 @@ export default function StoryDetailPage() {
           )}
         </div>
 
+        {/* Status Message for Processing/Rejected Stories */}
+        {story.status !== 'published' && (
+          <div className="mb-6">
+            {story.status === 'processing' ? (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+                <div className="flex items-center mb-3">
+                  <Clock className="w-6 h-6 text-yellow-600 mr-3" />
+                  <h3 className="text-lg font-semibold text-yellow-800">Story is Processing</h3>
+                </div>
+                <p className="text-yellow-700 mb-3">
+                  Your story is currently being processed by our AI system. This includes:
+                </p>
+                <ul className="list-disc list-inside text-yellow-700 space-y-1 mb-3">
+                  <li>Audio transcription and enhancement</li>
+                  <li>Content analysis and cultural context extraction</li>
+                  <li>Multi-language translation generation</li>
+                  <li>Quality verification</li>
+                </ul>
+                <p className="text-yellow-700 text-sm">
+                  ⏱️ Processing usually takes 2-24 hours. You'll receive an email when it's complete.
+                </p>
+              </div>
+            ) : story.status === 'rejected' ? (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                <div className="flex items-center mb-3">
+                  <XCircle className="w-6 h-6 text-red-600 mr-3" />
+                  <h3 className="text-lg font-semibold text-red-800">Story Processing Failed</h3>
+                </div>
+                <p className="text-red-700 mb-3">
+                  Unfortunately, we couldn't process your story. Common reasons include:
+                </p>
+                <ul className="list-disc list-inside text-red-700 space-y-1 mb-3">
+                  <li>Audio quality too low for transcription</li>
+                  <li>Unsupported audio format or corruption</li>
+                  <li>Audio file too short or too long</li>
+                  <li>Background noise interfering with speech recognition</li>
+                </ul>
+                <p className="text-red-700 text-sm mb-3">
+                  💡 Try re-recording in a quiet environment with clear speech and upload again.
+                </p>
+                <Link to="/upload" className="btn-primary inline-flex items-center">
+                  Upload New Version
+                </Link>
+              </div>
+            ) : null}
+          </div>
+        )}
+
         {/* Audio Player */}
-        {audioUrl && (
+        {audioUrl ? (
           <div className="mb-6">
             <AudioPlayer
               audioUrl={audioUrl}
@@ -271,7 +322,22 @@ export default function StoryDetailPage() {
               onPlay={handlePlay}
             />
           </div>
-        )}
+        ) : story.status !== 'published' ? (
+          <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Audio Not Available</h3>
+            <p className="text-gray-600">
+              Audio playback will be available once your story is successfully processed and published.
+            </p>
+          </div>
+        ) : audioError ? (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+            <h3 className="text-lg font-medium text-red-900 mb-2">Failed to Load Audio</h3>
+            <p className="text-red-700 mb-3">{audioError}</p>
+            <p className="text-red-600 text-sm">
+              Please try refreshing the page. If the problem persists, contact support.
+            </p>
+          </div>
+        ) : null}
 
         {/* Transcript Viewer */}
         <div className="mb-6">
@@ -281,6 +347,14 @@ export default function StoryDetailPage() {
             currentTime={currentTime}
             onSeek={handleSeek}
           />
+          {!transcript && story.status !== 'published' && (
+            <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-blue-800 text-sm">
+                <strong>Note:</strong> Transcript and translations will be generated during the processing phase. 
+                Check back once your story is published to see the full transcript with synchronized audio playback.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Storyteller Bio */}

@@ -1,17 +1,14 @@
 import { apiClient } from './api'
+import { MediaUploadResponse } from '../types/api'
 
-export interface MediaUploadResponse {
-  audio_url: string
-  file_size: number
-  story_id: string
-  message: string
-}
+// Get the backend base URL for constructing full URLs
+const BACKEND_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:8000'
 
-export interface AudioUploadResponse {
-  message: string
-  audio_url: string
-  file_size: number
-  story_id: string
+export interface FileValidation {
+  isValid: boolean
+  error?: string
+  size?: number
+  duration?: number
 }
 
 export class MediaService {
@@ -25,18 +22,24 @@ export class MediaService {
   }
 
   // Upload audio file for an existing story
-  async uploadAudioFile(file: File, storyId: string): Promise<AudioUploadResponse> {
+  async uploadAudioFile(file: File, storyId: string): Promise<MediaUploadResponse> {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('story_id', storyId)
 
-    const response = await apiClient.postFormData<AudioUploadResponse>('/media/upload-audio', formData)
+    const response = await apiClient.postFormData<MediaUploadResponse>('/media/upload-audio', formData)
     return response
   }
 
   // Get audio URL for a story
   async getAudioUrl(storyId: string): Promise<{ audio_url: string; expires_in: number; story_id: string }> {
     const response = await apiClient.get<{ audio_url: string; expires_in: number; story_id: string }>(`/media/audio/${storyId}`)
+    
+    // Convert relative URLs to full URLs
+    if (response.audio_url.startsWith('/media/') || response.audio_url.startsWith('/api/v1/media/')) {
+      response.audio_url = `${BACKEND_BASE_URL}${response.audio_url}`
+    }
+    
     return response
   }
 
