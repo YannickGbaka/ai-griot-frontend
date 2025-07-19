@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, User, LogOut } from 'lucide-react'
 import { useState } from 'react'
+import { useAuth } from '../../contexts/AuthContext'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -8,6 +9,12 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const { user, isAuthenticated, logout } = useAuth()
+
+  const handleLogout = () => {
+    logout()
+    setIsMenuOpen(false)
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -28,22 +35,44 @@ export default function Layout({ children }: LayoutProps) {
               <Link to="/stories" className="text-gray-700 hover:text-griot-600 font-medium">
                 Browse Stories
               </Link>
-              <Link to="/upload" className="text-gray-700 hover:text-griot-600 font-medium">
-                Share Story
-              </Link>
-              <Link to="/dashboard" className="text-gray-700 hover:text-griot-600 font-medium">
-                Dashboard
-              </Link>
+              {isAuthenticated && (
+                <>
+                  <Link to="/upload" className="text-gray-700 hover:text-griot-600 font-medium">
+                    Share Story
+                  </Link>
+                  <Link to="/dashboard" className="text-gray-700 hover:text-griot-600 font-medium">
+                    Dashboard
+                  </Link>
+                </>
+              )}
             </nav>
 
-            {/* Auth Buttons */}
+            {/* Auth Section */}
             <div className="hidden md:flex items-center space-x-4">
-              <Link to="/login" className="text-gray-700 hover:text-griot-600 font-medium">
-                Login
-              </Link>
-              <Link to="/signup" className="btn-primary">
-                Sign Up
-              </Link>
+              {isAuthenticated ? (
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <User className="h-5 w-5 text-gray-500" />
+                    <span className="text-sm text-gray-700">{user?.full_name || user?.email}</span>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center space-x-1 text-gray-700 hover:text-griot-600 font-medium"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Link to="/login" className="text-gray-700 hover:text-griot-600 font-medium">
+                    Login
+                  </Link>
+                  <Link to="/signup" className="btn-primary">
+                    Sign Up
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Mobile menu button */}
@@ -65,34 +94,52 @@ export default function Layout({ children }: LayoutProps) {
               >
                 Browse Stories
               </Link>
-              <Link
-                to="/upload"
-                className="block py-2 text-gray-700 hover:text-griot-600"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Share Story
-              </Link>
-              <Link
-                to="/dashboard"
-                className="block py-2 text-gray-700 hover:text-griot-600"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Dashboard
-              </Link>
-              <Link
-                to="/login"
-                className="block py-2 text-gray-700 hover:text-griot-600"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Login
-              </Link>
-              <Link
-                to="/signup"
-                className="block py-2 text-griot-600 font-medium"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Sign Up
-              </Link>
+              {isAuthenticated ? (
+                <>
+                  <Link
+                    to="/upload"
+                    className="block py-2 text-gray-700 hover:text-griot-600"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Share Story
+                  </Link>
+                  <Link
+                    to="/dashboard"
+                    className="block py-2 text-gray-700 hover:text-griot-600"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Dashboard
+                  </Link>
+                  <div className="border-t border-gray-200 my-2 py-2">
+                    <div className="py-2 text-sm text-gray-600">
+                      {user?.full_name || user?.email}
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="block py-2 text-gray-700 hover:text-griot-600 font-medium"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="block py-2 text-gray-700 hover:text-griot-600"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/signup"
+                    className="block py-2 text-griot-600 font-medium"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Sign Up
+                  </Link>
+                </>
+              )}
             </div>
           )}
         </div>

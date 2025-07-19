@@ -1,8 +1,12 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Eye, EyeOff, Check } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Eye, EyeOff, Check, AlertCircle } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function SignUpPage() {
+  const navigate = useNavigate()
+  const { register, isLoading, error, clearError } = useAuth()
+  
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [formData, setFormData] = useState({
@@ -14,6 +18,7 @@ export default function SignUpPage() {
   })
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    clearError() // Clear any previous errors when user starts typing
     const { name, value, type, checked } = e.target
     setFormData({
       ...formData,
@@ -21,10 +26,33 @@ export default function SignUpPage() {
     })
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: Implement signup logic
-    console.log('Signup attempt:', formData)
+    
+    // Client-side validation
+    if (formData.password !== formData.confirmPassword) {
+      return // This is already shown in the UI
+    }
+
+    if (!formData.agreedToTerms) {
+      return // Button should be disabled
+    }
+
+    try {
+      await register({
+        email: formData.email,
+        password: formData.password,
+        full_name: formData.fullName, // Map to backend field name
+        bio: '' // Optional field, can be empty
+      })
+      
+      // Registration successful, user is automatically logged in
+      // Navigate to dashboard
+      navigate('/dashboard')
+    } catch (err) {
+      // Error is handled by the auth context
+      console.error('Registration failed:', err)
+    }
   }
 
   const passwordRequirements = [
@@ -35,6 +63,8 @@ export default function SignUpPage() {
   ]
 
   const passwordsMatch = formData.password === formData.confirmPassword && formData.confirmPassword !== ''
+  const allPasswordRequirementsMet = passwordRequirements.every(req => req.met)
+  const isFormValid = formData.fullName && formData.email && allPasswordRequirementsMet && passwordsMatch && formData.agreedToTerms
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -54,6 +84,22 @@ export default function SignUpPage() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+          {error && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
+              <div className="flex">
+                <AlertCircle className="h-5 w-5 text-red-400" />
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">
+                    Registration Failed
+                  </h3>
+                  <div className="mt-1 text-sm text-red-700">
+                    {error}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">
@@ -70,6 +116,7 @@ export default function SignUpPage() {
                   value={formData.fullName}
                   onChange={handleInputChange}
                   placeholder="Enter your full name"
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -89,6 +136,7 @@ export default function SignUpPage() {
                   value={formData.email}
                   onChange={handleInputChange}
                   placeholder="Enter your email"
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -108,11 +156,13 @@ export default function SignUpPage() {
                   value={formData.password}
                   onChange={handleInputChange}
                   placeholder="Create a password"
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
                   className="absolute inset-y-0 right-0 pr-3 flex items-center"
                   onClick={() => setShowPassword(!showPassword)}
+                  disabled={isLoading}
                 >
                   {showPassword ? (
                     <EyeOff className="h-5 w-5 text-gray-400" />
@@ -155,11 +205,13 @@ export default function SignUpPage() {
                   value={formData.confirmPassword}
                   onChange={handleInputChange}
                   placeholder="Confirm your password"
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
                   className="absolute inset-y-0 right-0 pr-3 flex items-center"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  disabled={isLoading}
                 >
                   {showConfirmPassword ? (
                     <EyeOff className="h-5 w-5 text-gray-400" />
@@ -182,6 +234,7 @@ export default function SignUpPage() {
                 className="h-4 w-4 text-griot-600 focus:ring-griot-500 border-gray-300 rounded"
                 checked={formData.agreedToTerms}
                 onChange={handleInputChange}
+                disabled={isLoading}
               />
               <label htmlFor="agreedToTerms" className="ml-2 block text-sm text-gray-900">
                 I agree to the{' '}
@@ -198,10 +251,10 @@ export default function SignUpPage() {
             <div>
               <button 
                 type="submit" 
-                className="w-full btn-primary"
-                disabled={!formData.agreedToTerms || !passwordsMatch}
+                className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!isFormValid || isLoading}
               >
-                Create Account
+                {isLoading ? 'Creating Account...' : 'Create Account'}
               </button>
             </div>
           </form>
@@ -217,7 +270,10 @@ export default function SignUpPage() {
             </div>
 
             <div className="mt-6 grid grid-cols-2 gap-3">
-              <button className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+              <button 
+                className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                disabled={isLoading}
+              >
                 <svg className="h-5 w-5" viewBox="0 0 24 24">
                   <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                   <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -227,7 +283,10 @@ export default function SignUpPage() {
                 <span className="ml-2">Google</span>
               </button>
 
-              <button className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+              <button 
+                className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                disabled={isLoading}
+              >
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                 </svg>

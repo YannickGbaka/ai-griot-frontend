@@ -1,25 +1,45 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Eye, EyeOff } from 'lucide-react'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function LoginPage() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { login, isLoading, error, clearError } = useAuth()
+  
   const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   })
 
+  // Get the intended destination from location state or default to dashboard
+  const from = location.state?.from?.pathname || '/dashboard'
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    clearError() // Clear any previous errors when user starts typing
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     })
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: Implement login logic
-    console.log('Login attempt:', formData)
+    
+    try {
+      await login({
+        username: formData.email, // Backend expects username field
+        password: formData.password
+      })
+      
+      // Redirect to intended destination or dashboard
+      navigate(from, { replace: true })
+    } catch (err) {
+      // Error is handled by the auth context
+      console.error('Login failed:', err)
+    }
   }
 
   return (
@@ -40,6 +60,22 @@ export default function LoginPage() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+          {error && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
+              <div className="flex">
+                <AlertCircle className="h-5 w-5 text-red-400" />
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">
+                    Login Failed
+                  </h3>
+                  <div className="mt-1 text-sm text-red-700">
+                    {error}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
@@ -56,6 +92,7 @@ export default function LoginPage() {
                   value={formData.email}
                   onChange={handleInputChange}
                   placeholder="Enter your email"
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -75,11 +112,13 @@ export default function LoginPage() {
                   value={formData.password}
                   onChange={handleInputChange}
                   placeholder="Enter your password"
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
                   className="absolute inset-y-0 right-0 pr-3 flex items-center"
                   onClick={() => setShowPassword(!showPassword)}
+                  disabled={isLoading}
                 >
                   {showPassword ? (
                     <EyeOff className="h-5 w-5 text-gray-400" />
@@ -91,28 +130,23 @@ export default function LoginPage() {
             </div>
 
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-griot-600 focus:ring-griot-500 border-gray-300 rounded"
-                />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                  Remember me
-                </label>
-              </div>
-
               <div className="text-sm">
-                <a href="#" className="font-medium text-griot-600 hover:text-griot-500">
+                <Link 
+                  to="/forgot-password" 
+                  className="font-medium text-griot-600 hover:text-griot-500"
+                >
                   Forgot your password?
-                </a>
+                </Link>
               </div>
             </div>
 
             <div>
-              <button type="submit" className="w-full btn-primary">
-                Sign in
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? 'Signing in...' : 'Sign in'}
               </button>
             </div>
           </form>
