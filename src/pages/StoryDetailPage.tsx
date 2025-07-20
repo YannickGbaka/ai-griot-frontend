@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Share2, Heart, BookOpen, Globe } from 'lucide-react'
 import { storiesService } from '../services/storiesService'
-import TranscriptPlayer from '../components/TranscriptPlayer'
+import IllustratedTranscriptPlayer from '../components/IllustratedTranscriptPlayer'
 
 interface StoryDetail {
   id: string
@@ -38,6 +38,21 @@ interface StoryDetail {
       word: string
       start_time: number
       end_time: number
+    }>
+  }>
+  paragraphs: Array<{
+    id: string
+    sequence_order: number  // Changed from paragraph_index
+    content: string  // Changed from text
+    start_time?: number
+    end_time?: number
+    word_count?: number
+    illustrations: Array<{
+      id: string
+      image_url: string
+      prompt_used?: string
+      style?: string  // Changed from style_description
+      generation_metadata?: Record<string, unknown>
     }>
   }>
   analytics: {
@@ -99,6 +114,7 @@ export default function StoryDetailPage() {
             text: t.text,
             words: t.words || []
           })) || [],
+          paragraphs: [], // For now, we'll use empty array until backend supports paragraphs
           analytics: storyData.analytics ? {
             views: storyData.analytics.views || 0,
             listens: storyData.analytics.listens || 0,
@@ -244,7 +260,7 @@ export default function StoryDetailPage() {
 
             {/* Transcript Player */}
             {story.transcript && (
-              <TranscriptPlayer
+              <IllustratedTranscriptPlayer
                 audioUrl={story.audio_file_url}
                 transcript={{
                   text: story.transcript.original_text,
@@ -257,6 +273,7 @@ export default function StoryDetailPage() {
                   text: t.text,
                   words: t.words || []
                 }))}
+                paragraphs={story.paragraphs}
                 title={story.title}
                 onTimeUpdate={(time) => {
                   // Track listening progress if needed

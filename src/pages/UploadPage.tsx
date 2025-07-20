@@ -316,6 +316,12 @@ export default function UploadPage() {
             uploadResult.story.id,
             // On status update
             (status: ProcessingStatusResponse) => {
+              console.log(`📊 Processing update for ${uploadResult.story.id}:`, {
+                step: status.current_step,
+                progress: status.progress_percentage,
+                message: status.message
+              })
+              
               setProcessingStatus({
                 status: 'processing',
                 message: status.message,
@@ -326,6 +332,7 @@ export default function UploadPage() {
             },
             // On completion
             (status: ProcessingStatusResponse) => {
+              console.log(`✅ Processing completed for ${uploadResult.story.id}:`, status)
               clearTimeout(processingTimeout)
               setProcessingStatus({
                 status: 'success',
@@ -340,6 +347,7 @@ export default function UploadPage() {
             },
             // On error
             (error: string) => {
+              console.log(`❌ Processing failed for ${uploadResult.story.id}:`, error)
               clearTimeout(processingTimeout)
               setProcessingStatus({
                 status: 'error',
@@ -349,8 +357,8 @@ export default function UploadPage() {
                 error: error
               })
             },
-            3000, // Poll every 3 seconds
-            40    // Max 40 retries (2 minutes)
+            2000, // Poll every 2 seconds (faster for better UX)
+            60    // Max 60 retries (2 minutes)
           )
         } catch (pollingError) {
           console.error('Failed to start polling:', pollingError)
@@ -932,6 +940,12 @@ export default function UploadPage() {
                             <p><strong>Current Step:</strong> {processingStatus.detailedStatus.current_step}</p>
                             <p><strong>Progress:</strong> {processingStatus.detailedStatus.progress_percentage}%</p>
                             <p><strong>Message:</strong> {processingStatus.detailedStatus.message}</p>
+                            {processingStatus.detailedStatus.current_step === 'illustrating' && (
+                              <div className="mt-2 p-2 bg-blue-50 rounded border border-blue-200">
+                                <p className="text-blue-800 font-medium">🎨 Illustration Step Active!</p>
+                                <p className="text-blue-700">AI is generating visual illustrations for your story...</p>
+                              </div>
+                            )}
                           </>
                         )}
                         <button

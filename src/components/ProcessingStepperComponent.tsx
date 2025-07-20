@@ -1,5 +1,5 @@
 import React from 'react'
-import { CheckCircle, Loader2, AlertCircle, Upload, FileText, Sparkles, Languages, CheckCheck, LucideIcon } from 'lucide-react'
+import { CheckCircle, Loader2, AlertCircle, Upload, FileText, Sparkles, Languages, CheckCheck, LucideIcon, Image } from 'lucide-react'
 
 export interface ProcessingStep {
   key: string
@@ -51,6 +51,12 @@ export const PROCESSING_STEPS: ProcessingStep[] = [
     label: 'Translating',
     icon: Languages,
     description: 'Generating multilingual translations'
+  },
+  {
+    key: 'illustrating',
+    label: 'Illustrating',
+    icon: Image,
+    description: 'Creating AI-generated visual illustrations'
   },
   {
     key: 'published',
